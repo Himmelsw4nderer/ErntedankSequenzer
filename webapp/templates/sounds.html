@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}Sound Files - ErntedankSequenzer{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-volume-up"></i> Sound File Management</h2>
+                <div>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Sequences
+                    </a>
+                    <a href="{{ url_for('editor') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-code"></i> Sequence Editor
+                    </a>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-upload"></i> Upload Sound File</h5>
+                </div>
+                <div class="card-body">
+                    <form id="upload-form" enctype="multipart/form-data">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <input type="file" class="form-control" id="sound-file" accept=".wav,.mp3,.ogg,.flac,.m4a">
+                                    <div class="form-text">
+                                        Supported formats: {{ supported_formats | join(', ') }} (Max size: 50MB)
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-primary w-100" id="upload-btn">
+                                    <i class="fas fa-upload"></i> Upload File
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Upload progress -->
+                    <div id="upload-progress" class="mt-3" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <small id="upload-status" class="text-muted"></small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sound Files List -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-music"></i> Sound Files</h5>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshSounds()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if error %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> {{ error }}
+                        </div>
+                    {% endif %}
+
+                    <div id="sounds-list">
+                        {% if sounds %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th><i class="fas fa-file-audio"></i> File Name</th>
+                                            <th><i class="fas fa-weight"></i> Size</th>
+                                            <th><i class="fas fa-calendar"></i> Modified</th>
+                                            <th><i class="fas fa-play"></i> Preview</th>
+                                            <th><i class="fas fa-cogs"></i> Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for sound in sounds %}
+                                        <tr>
+                                            <td>
+                                                <i class="fas fa-music text-primary"></i>
+                                                <strong>{{ sound.name }}</strong>
+                                            </td>
+                                            <td>{{ format_file_size(sound.size) }}</td>
+                                            <td>{{ format_timestamp(sound.modified) }}</td>
+                                            <td>
+                                                <button class="btn btn-outline-success btn-sm" onclick="previewSound('{{ sound.name }}')">
+                                                    <i class="fas fa-play"></i> Play
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-outline-danger btn-sm" onclick="deleteSound('{{ sound.name }}')">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5 text-muted">
+                                <i class="fas fa-music fa-3x mb-3 opacity-50"></i>
+                                <h5>No sound files found</h5>
+                                <p>Upload some sound files to get started!</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Usage Examples -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Usage in Sequences</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-3">Use these functions in your sequences to play sound files:</p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-code"></i> Basic Usage</h6>
+                            <pre class="bg-light p-3 rounded"><code># Play a sound file
+play_sound('filename.wav')
+
+# Play with custom volume (0.0 to 1.0)
+play_sound('filename.wav', 0.8)</code></pre>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-code"></i> Advanced Usage</h6>
+                            <pre class="bg-light p-3 rounded"><code># Play sound and wait for completion
+play_sound('intro.mp3')
+wait_for_sound()
+
+# Stop currently playing sound
+stop_sound()</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Audio Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-volume-up"></i> Sound Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p id="preview-filename" class="fw-bold"></p>
+                <audio id="audio-preview" controls class="w-100">
+                    Your browser does not support audio playback.
+                </audio>
+                <div class="mt-3">
+                    <button class="btn btn-secondary btn-sm" onclick="stopPreview()">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentAudio = null;
+
+// Format file size helper
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Format timestamp helper
+function formatTimestamp(timestamp) {
+    return new Date(timestamp * 1000).toLocaleDateString() + ' ' +
+           new Date(timestamp * 1000).toLocaleTimeString();
+}
+
+// Upload form handling
+$('#upload-form').submit(function(e) {
+    e.preventDefault();
+
+    const fileInput = $('#sound-file')[0];
+    const file = fileInput.files[0];
+
+    if (!file) {
+        showFlashMessage('Please select a file to upload', 'warning');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadBtn = $('#upload-btn');
+    const originalContent = uploadBtn.html();
+    const progressDiv = $('#upload-progress');
+    const progressBar = progressDiv.find('.progress-bar');
+    const statusText = $('#upload-status');
+
+    // Show progress and disable button
+    uploadBtn.html('<i class="fas fa-spinner fa-spin"></i> Uploading...').prop('disabled', true);
+    progressDiv.show();
+    progressBar.css('width', '0%');
+    statusText.text('Uploading...');
+
+    $.ajax({
+        url: '/api/sounds/upload',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        xhr: function() {
+            const xhr = new XMLHttpRequest();
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressBar.css('width', percentComplete + '%');
+                    statusText.text(`Uploading... ${Math.round(percentComplete)}%`);
+                }
+            });
+            return xhr;
+        },
+        success: function(data) {
+            if (data.success) {
+                showFlashMessage(data.message, 'success');
+                fileInput.value = '';
+                refreshSounds();
+                progressBar.css('width', '100%');
+                statusText.text('Upload complete!');
+                setTimeout(() => progressDiv.hide(), 2000);
+            } else {
+                showFlashMessage(data.error || 'Upload failed', 'danger');
+                progressDiv.hide();
+            }
+        },
+        error: function(xhr) {
+            let error = 'Upload failed';
+            try {
+                const data = JSON.parse(xhr.responseText);
+                error = data.error || error;
+            } catch (e) {}
+            showFlashMessage(error, 'danger');
+            progressDiv.hide();
+        },
+        complete: function() {
+            uploadBtn.html(originalContent).prop('disabled', false);
+        }
+    });
+});
+
+// Refresh sounds list
+function refreshSounds() {
+    window.location.reload();
+}
+
+// Preview sound
+function previewSound(filename) {
+    const audio = $('#audio-preview')[0];
+    const modal = new bootstrap.Modal($('#previewModal')[0]);
+
+    $('#preview-filename').text(filename);
+    audio.src = `/sounds/${filename}`;
+
+    modal.show();
+
+    // Play audio when modal is shown
+    $('#previewModal').on('shown.bs.modal', function() {
+        audio.play().catch(e => {
+            showFlashMessage('Could not play audio file', 'warning');
+        });
+    });
+}
+
+// Stop preview
+function stopPreview() {
+    const audio = $('#audio-preview')[0];
+    audio.pause();
+    audio.currentTime = 0;
+}
+
+// Delete sound
+function deleteSound(filename) {
+    if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+        return;
+    }
+
+    $.ajax({
+        url: `/api/sounds/${encodeURIComponent(filename)}`,
+        type: 'DELETE',
+        success: function(data) {
+            if (data.success) {
+                showFlashMessage(data.message, 'success');
+                refreshSounds();
+            } else {
+                showFlashMessage(data.error || 'Delete failed', 'danger');
+            }
+        },
+        error: function(xhr) {
+            let error = 'Delete failed';
+            try {
+                const data = JSON.parse(xhr.responseText);
+                error = data.error || error;
+            } catch (e) {}
+            showFlashMessage(error, 'danger');
+        }
+    });
+}
+
+// Flash message function (assuming it exists in base template)
+function showFlashMessage(message, type) {
+    // Create flash message element
+    const alertClass = type === 'success' ? 'alert-success' :
+                      type === 'warning' ? 'alert-warning' :
+                      type === 'info' ? 'alert-info' : 'alert-danger';
+
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+
+    // Add to top of container
+    $('.container-fluid').prepend(alertHtml);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        $('.alert').first().alert('close');
+    }, 5000);
+}
+
+// Clean up audio when page unloads
+$(window).on('beforeunload', function() {
+    if (currentAudio) {
+        currentAudio.pause();
+    }
+});
+</script>
+{% endblock %}

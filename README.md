@@ -5,7 +5,7 @@ A web-based DMX and sound sequence controller for Raspberry Pi, designed for cre
 ## Features
 
 - **Web Interface**: Easy-to-use browser-based sequence editor
-- **DMX Control**: Send commands to DMX lighting equipment via serial/USB
+- **DMX Control**: Send commands to DMX lighting equipment via GPIO pins
 - **Sound Playback**: Play audio files synchronized with lighting
 - **Sequence Editor**: Built-in code editor with syntax validation
 - **Real-time Control**: Start, stop, and monitor sequences remotely
@@ -15,9 +15,9 @@ A web-based DMX and sound sequence controller for Raspberry Pi, designed for cre
 ## Hardware Requirements
 
 - Raspberry Pi (3B+ or newer recommended)
-- DMX interface (USB-to-DMX adapter or serial interface)
+- DMX interface (GPIO-based DMX output circuit)
 - Audio output (built-in audio jack, USB audio interface, or HAT)
-- Optional: GPIO-controlled devices
+- GPIO pins for DMX data output and control
 
 ## Software Requirements
 
@@ -26,14 +26,31 @@ A web-based DMX and sound sequence controller for Raspberry Pi, designed for cre
 
 ## Installation
 
-### 1. Clone the Repository
+### Automated Installation (Recommended)
+
+The easiest way to install ErntedankSequenzer is using the automated installer:
 
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd ErntedankSequenzer
+
+# Run the automated installer
+./install.sh
 ```
 
-### 2. Install Dependencies
+The installer will:
+- Install system dependencies
+- Set up Python virtual environment
+- Configure user permissions (gpio, audio groups)
+- Create systemd service for automatic startup
+- Enable the service to start on boot
+
+After installation, the web interface will be available at `http://your-pi-ip:5000`
+
+### Manual Installation
+
+If you prefer to install manually:
 
 ```bash
 # Update system packages
@@ -41,7 +58,7 @@ sudo apt update
 sudo apt upgrade -y
 
 # Install system dependencies
-sudo apt install -y python3-pip python3-venv python3-dev libasound2-dev
+sudo apt install -y python3-pip python3-venv python3-dev python3-rpi.gpio alsa-utils pulseaudio
 
 # Create virtual environment
 python3 -m venv venv
@@ -49,14 +66,40 @@ source venv/bin/activate
 
 # Install Python dependencies
 pip install -r requirements.txt
+
+# Add user to required groups
+sudo usermod -a -G gpio $USER
+sudo usermod -a -G audio $USER
+
+# Create directories
+mkdir -p logs sequences sounds
 ```
 
-### 3. Hardware Setup
+### Hardware Setup
 
 #### DMX Interface
-- Connect your USB-to-DMX adapter to the Raspberry Pi
-- Note the device path (usually `/dev/ttyUSB0` or `/dev/ttyACM0`)
-- Update `config.json` with the correct serial port
+The system uses GPIO pins to generate DMX512 protocol signals. You'll need a DMX output circuit connected to your Raspberry Pi.
+
+**Required Hardware:**
+- RS485/RS422 transceiver IC (e.g., SN75176, MAX485)
+- DMX connector (3-pin or 5-pin XLR)
+- Basic resistors and capacitors for signal conditioning
+
+**GPIO Connections:**
+- GPIO 18 (default): DMX data output
+- GPIO 22 (default): DMX enable/disable
+- Connect to your DMX interface circuit
+
+**Basic Circuit:**
+```
+RPi GPIO 18 -----> RS485 Data Input (DI)
+RPi GPIO 22 -----> RS485 Driver Enable (DE/RE)
+RS485 A     -----> XLR Pin 3 (DMX+)  
+RS485 B     -----> XLR Pin 2 (DMX-)
+GND         -----> XLR Pin 1 (Ground)
+```
+
+- Update `config.json` with your specific GPIO pin assignments
 
 #### Audio Setup
 ```bash
@@ -68,15 +111,50 @@ sudo nano /usr/share/alsa/alsa.conf
 # Change defaults.pcm.card and defaults.ctl.card to your USB device number
 ```
 
-### 4. Configure the System
+### Service Management
+
+If you used the automated installer, the service is managed with systemd:
+
+```bash
+# Check service status
+sudo systemctl status erntedanksequenzer
+
+# View logs
+sudo journalctl -u erntedanksequenzer -f
+
+# Restart service
+sudo systemctl restart erntedanksequenzer
+
+# Stop service
+sudo systemctl stop erntedanksequenzer
+
+# Disable auto-start
+sudo systemctl disable erntedanksequenzer
+```
+
+Helper scripts are also created:
+- `./service-status.sh` - Check service status
+- `./service-restart.sh` - Restart service
+- `./view-logs.sh` - View live logs
+- `./service-stop.sh` - Stop service
+
+### Uninstallation
+
+To remove the service and clean up:
+
+```bash
+./uninstall.sh
+```
+
+### Configuration
 
 Edit `config.json` to match your hardware setup:
 
 ```json
 {
     "control_pin": 17,
-    "serial_port": "/dev/ttyUSB0",
-    "baud_rate": 250000,
+    "dmx_data_pin": 18,
+    "dmx_enable_pin": 22,
     "sounds_directory": "sounds",
     "web_host": "0.0.0.0",
     "web_port": 5000
@@ -94,8 +172,13 @@ Place your audio files in the `sounds/` directory. Supported formats:
 
 ## Usage
 
-### Starting the Web Interface
+### Accessing the Web Interface
 
+If you used the automated installer, ErntedankSequenzer runs as a system service and starts automatically on boot.
+
+**Access the web interface at:** `http://your-pi-ip:5000`
+
+**Manual startup** (if not using the service):
 ```bash
 # Activate virtual environment
 source venv/bin/activate
@@ -104,11 +187,25 @@ source venv/bin/activate
 python3 run.py
 ```
 
-The web interface will be available at `http://raspberry-pi-ip:5000`
+### Service Status
 
-### Command Line Usage
-
+Check if the service is running:
 ```bash
+./service-status.sh
+# or
+sudo systemctl status erntedanksequenzer
+```
+
+### Command Line Usage (Development/Testing)
+
+For testing and development, you can run sequences directly:
+```bash
+# Stop the service first (if running)
+sudo systemctl stop erntedanksequenzer
+
+# Activate virtual environment
+source venv/bin/activate
+
 # Run a specific sequence once
 python3 run.py --cli --sequence my_sequence
 
@@ -120,6 +217,9 @@ python3 run.py --cli --test-dmx
 
 # Test sound playback
 python3 run.py --cli --test-sound --sound-file test.wav
+
+# Restart the service when done
+sudo systemctl start erntedanksequenzer
 ```
 
 ## Creating Sequences
@@ -207,8 +307,8 @@ write_dmx(1, 0)    # Turn off main light
 ```json
 {
     "control_pin": 17,              // GPIO pin for additional control
-    "serial_port": "/dev/ttyUSB0",  // DMX serial port
-    "baud_rate": 250000,            // DMX baud rate (standard: 250000)
+    "dmx_data_pin": 18,             // GPIO pin for DMX data output
+    "dmx_enable_pin": 22,           // GPIO pin for DMX enable/disable
     "sounds_directory": "sounds",   // Audio files directory
     "sequences_directory": "sequences", // Generated sequences directory
     "web_host": "0.0.0.0",         // Web server host (0.0.0.0 for all interfaces)
@@ -220,28 +320,41 @@ write_dmx(1, 0)    # Turn off main light
 }
 ```
 
-## Troubleshooting
+### Troubleshooting
 
-### Common Issues
+### Service Issues
+
+**Service won't start:**
+- Check service status: `sudo systemctl status erntedanksequenzer`
+- View detailed logs: `sudo journalctl -u erntedanksequenzer -f`
+- Verify configuration: `cat config.json`
+- Check file permissions in project directory
+
+**Service starts but web interface not accessible:**
+- Verify service is running: `./service-status.sh`
+- Check if port is in use: `sudo netstat -tlnp | grep :5000`
+- Verify firewall settings: `sudo ufw status`
+- Check config.json for correct web_host and web_port
+
+### Hardware Issues
 
 **DMX not working:**
-- Check serial port permissions: `sudo usermod -a -G dialout $USER`
-- Verify correct serial port in config.json
-- Test with multimeter or DMX tester
+- Check GPIO permissions: `sudo usermod -a -G gpio $USER`
+- Verify correct GPIO pins in config.json
+- Test GPIO output with multimeter or oscilloscope
+- Ensure DMX hardware interface is properly connected
+- Reboot after adding user to gpio group
 
 **Audio not playing:**
 - Check audio device: `aplay -l`
-- Test audio: `speaker-test -t wav`
-- Verify file format compatibility
+- Test with: `speaker-test -c2`
+- Verify volume levels: `alsamixer`
+- Check if user is in audio group: `groups $USER`
 
-**Web interface not accessible:**
-- Check firewall settings
-- Ensure correct IP address and port
-- Try accessing via localhost:5000 on the Pi
-
-**Permissions errors:**
-- Run with sudo for GPIO access (not recommended for production)
-- Add user to gpio group: `sudo usermod -a -G gpio $USER`
+**Permission errors:**
+- Ensure user is in required groups: `groups $USER`
+- Reboot after group changes take effect
+- Check service runs as correct user: `sudo systemctl status erntedanksequenzer`
 
 ### Debug Mode
 

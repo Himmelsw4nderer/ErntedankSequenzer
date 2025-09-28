@@ -18,22 +18,29 @@ def setup_logging(config):
     """Setup logging configuration"""
     log_level = getattr(logging, config.get('log_level', 'INFO').upper())
 
-    # Create logs directory
-    logs_dir = Path('logs')
+    # Get absolute path to project root and create logs directory
+    project_root = Path(__file__).parent.absolute()
+    logs_dir = project_root / 'logs'
     logs_dir.mkdir(exist_ok=True)
 
-    # Configure logging
+    # Clear any existing handlers to prevent duplicates
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Configure logging with absolute paths
     logging.basicConfig(
         level=log_level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(logs_dir / 'sequenzer.log'),
             logging.StreamHandler(sys.stdout)
-        ]
+        ],
+        force=True  # Force reconfiguration
     )
 
     logger = logging.getLogger(__name__)
-    logger.info("Logging initialized")
+    logger.info(f"Logging initialized - Log file: {logs_dir / 'sequenzer.log'}")
     return logger
 
 def load_config(config_file='config.json'):
@@ -112,11 +119,43 @@ def run_webapp(config, logger):
     try:
         # Import Flask app
         from webapp.app import app
+        import logging as flask_logging
 
         # Configure Flask app
         app.config['SECRET_KEY'] = config.get('secret_key', 'your-secret-key-change-this')
 
+        # Set up webapp logging
+        project_root = Path(__file__).parent.absolute()
+        logs_dir = project_root / 'logs'
+        webapp_log_file = logs_dir / 'webapp.log'
+
+        # Configure Flask app logger
+        app_logger = app.logger
+        app_logger.setLevel(flask_logging.INFO)
+
+        # Remove default handlers
+        app_logger.handlers.clear()
+
+        # Add file handler for Flask app
+        app_file_handler = flask_logging.FileHandler(webapp_log_file)
+        app_formatter = flask_logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        app_file_handler.setFormatter(app_formatter)
+        app_logger.addHandler(app_file_handler)
+
+        # Configure werkzeug logger
+        werkzeug_logger = flask_logging.getLogger('werkzeug')
+        werkzeug_logger.setLevel(flask_logging.INFO)
+
+        # Remove existing handlers to prevent duplicates
+        werkzeug_logger.handlers.clear()
+
+        # Add file handler for werkzeug
+        werkzeug_file_handler = flask_logging.FileHandler(webapp_log_file)
+        werkzeug_file_handler.setFormatter(app_formatter)
+        werkzeug_logger.addHandler(werkzeug_file_handler)
+
         logger.info(f"Starting web server on {config['web_host']}:{config['web_port']}")
+        logger.info(f"Web server logs: {webapp_log_file}")
 
         app.run(
             host=config['web_host'],
@@ -134,6 +173,7 @@ def run_webapp(config, logger):
 def run_cli_mode(config, logger, args):
     """Run in command-line mode for testing"""
     from sequence_executor import SequenceExecutor
+    import time
 
     executor = SequenceExecutor()
 

@@ -5,8 +5,8 @@ Werkzeug==2.3.7
 # GPIO Control (Raspberry Pi)
 RPi.GPIO==0.7.1
 
-# Serial Communication (DMX)
-pyserial==3.5
+# Serial Communication (removed - now using GPIO for DMX)
+# pyserial==3.5
 
 # Audio/Sound Support
 pygame==2.5.2

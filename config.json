@@ -1,7 +1,7 @@
 {
     "control_pin": 17,
-    "serial_port": "/dev/ttyS0",
-    "baud_rate": 250000,
+    "dmx_data_pin": 18,
+    "dmx_enable_pin": 22,
     "sounds_directory": "sounds",
     "sequences_directory": "sequences",
     "web_host": "0.0.0.0",

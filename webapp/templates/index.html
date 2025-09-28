@@ -89,6 +89,9 @@
                     <button id="stop-btn" class="btn btn-danger" onclick="stopSequence()">
                         <i class="fas fa-stop"></i> Stop All
                     </button>
+                    <a href="{{ url_for('sounds') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-volume-up"></i> Manage Sound Files
+                    </a>
                 </div>
 
                 <hr>
@@ -122,6 +125,30 @@
                     </button>
                 </div>
                 {% endfor %}
+            </div>
+        </div>
+
+        <!-- Real-time Action Log -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-stream"></i> Action Log
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-secondary" onclick="toggleActionLog()" id="toggle-log-btn">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="clearActionLog()">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="action-log" class="action-log">
+                    <div class="p-3 text-muted text-center">
+                        <i class="fas fa-info-circle"></i> Action log will appear here when sequences are running
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -313,6 +340,22 @@ function updateDetailedStatus() {
                     </div>
                 `;
 
+                if (status.running && status.current_sequence) {
+                    statusHtml += `
+                        <div class="small text-primary mb-1">
+                            <i class="fas fa-file-code"></i> Sequence: ${status.current_sequence}
+                        </div>
+                    `;
+
+                    if (status.loop_mode && status.loop_count > 0) {
+                        statusHtml += `
+                            <div class="small text-success mb-1">
+                                <i class="fas fa-repeat"></i> Loop: #${status.loop_count}
+                            </div>
+                        `;
+                    }
+                }
+
                 if (status.sound_playing) {
                     statusHtml += `
                         <div class="small text-info">
@@ -372,11 +415,226 @@ $('#confirm-delete').click(function() {
     }
 });
 
+// Action log functionality
+let actionLogPaused = false;
+let eventSource = null;
+
+function initActionLog() {
+    if (eventSource) {
+        eventSource.close();
+    }
+
+    eventSource = new EventSource('/api/feedback/stream');
+
+    eventSource.onmessage = function(event) {
+        if (actionLogPaused) return;
+
+        try {
+            const action = JSON.parse(event.data);
+            addActionToLog(action);
+        } catch (e) {
+            console.error('Error parsing action data:', e);
+        }
+    };
+
+    eventSource.onerror = function(event) {
+        console.error('Action log stream error:', event);
+        setTimeout(() => {
+            if (!actionLogPaused) {
+                initActionLog();
+            }
+        }, 5000); // Retry after 5 seconds
+    };
+}
+
+function addActionToLog(action) {
+    const logContainer = $('#action-log');
+    const timestamp = new Date(action.timestamp).toLocaleTimeString();
+
+    // Remove placeholder text if present
+    if (logContainer.find('.text-muted.text-center').length) {
+        logContainer.empty();
+    }
+
+    // Determine icon and color based on action type
+    let icon, colorClass;
+    switch (action.type) {
+        case 'dmx':
+            icon = 'fa-lightbulb';
+            colorClass = 'text-warning';
+            break;
+        case 'sound':
+            icon = 'fa-volume-up';
+            colorClass = 'text-info';
+            break;
+        case 'sleep':
+            icon = 'fa-clock';
+            colorClass = 'text-secondary';
+            break;
+        case 'loop':
+            icon = 'fa-repeat';
+            colorClass = 'text-success';
+            break;
+        case 'sequence':
+            icon = 'fa-play';
+            colorClass = 'text-primary';
+            break;
+        case 'system':
+            icon = 'fa-cog';
+            colorClass = 'text-info';
+            break;
+        case 'error':
+            icon = 'fa-exclamation-triangle';
+            colorClass = 'text-danger';
+            break;
+        default:
+            icon = 'fa-info-circle';
+            colorClass = 'text-muted';
+    }
+
+    const logEntry = $(`
+        <div class="action-entry border-bottom">
+            <div class="d-flex align-items-start p-2">
+                <div class="flex-shrink-0 me-2">
+                    <i class="fas ${icon} ${colorClass}"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="action-message">${action.message}</div>
+                    <small class="text-muted">${timestamp}</small>
+                </div>
+            </div>
+        </div>
+    `);
+
+    logContainer.prepend(logEntry);
+
+    // Keep only last 50 entries
+    const entries = logContainer.find('.action-entry');
+    if (entries.length > 50) {
+        entries.slice(50).remove();
+    }
+
+    // Auto-scroll to top for new entries
+    logContainer.scrollTop(0);
+}
+
+function toggleActionLog() {
+    actionLogPaused = !actionLogPaused;
+    const btn = $('#toggle-log-btn');
+
+    if (actionLogPaused) {
+        btn.html('<i class="fas fa-play"></i> Resume');
+        btn.removeClass('btn-outline-secondary').addClass('btn-outline-success');
+        if (eventSource) {
+            eventSource.close();
+        }
+    } else {
+        btn.html('<i class="fas fa-pause"></i> Pause');
+        btn.removeClass('btn-outline-success').addClass('btn-outline-secondary');
+        initActionLog();
+    }
+}
+
+function clearActionLog() {
+    if (!confirm('Are you sure you want to clear the action log?')) {
+        return;
+    }
+
+    $.post('/api/feedback/clear')
+        .done(function(data) {
+            if (data.success) {
+                $('#action-log').html(`
+                    <div class="p-3 text-muted text-center">
+                        <i class="fas fa-info-circle"></i> Action log cleared
+                    </div>
+                `);
+                showFlashMessage('Action log cleared', 'success');
+            } else {
+                showFlashMessage(data.error || 'Failed to clear action log', 'danger');
+            }
+        })
+        .fail(function(xhr) {
+            const error = xhr.responseJSON?.error || 'Failed to clear action log';
+            showFlashMessage(error, 'danger');
+        });
+}
+
+// Load initial actions
+function loadInitialActions() {
+    $.get('/api/feedback/actions?limit=20')
+        .done(function(data) {
+            if (data.success && data.actions.length > 0) {
+                const logContainer = $('#action-log');
+                logContainer.empty();
+
+                data.actions.reverse().forEach(action => {
+                    addActionToLog(action);
+                });
+            }
+        })
+        .fail(function(xhr) {
+            console.error('Failed to load initial actions:', xhr);
+        });
+}
+
 // Update detailed status more frequently
 setInterval(updateDetailedStatus, 1000);
 
 $(document).ready(function() {
     updateDetailedStatus();
+    loadInitialActions();
+    initActionLog();
+});
+
+// Clean up event source when page unloads
+$(window).on('beforeunload', function() {
+    if (eventSource) {
+        eventSource.close();
+    }
 });
 </script>
+
+<style>
+.action-log {
+    height: 300px;
+    overflow-y: auto;
+    background-color: #1a1a1a;
+    border: 1px solid #404040;
+}
+
+.action-entry {
+    border-bottom: 1px solid #2d2d2d !important;
+    transition: background-color 0.2s;
+}
+
+.action-entry:hover {
+    background-color: #2d2d2d;
+}
+
+.action-entry:last-child {
+    border-bottom: none !important;
+}
+
+.action-message {
+    font-size: 0.9rem;
+    color: #ffffff;
+}
+
+.action-log::-webkit-scrollbar {
+    width: 6px;
+}
+
+.action-log::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.action-log::-webkit-scrollbar-thumb {
+    background: #404040;
+    border-radius: 3px;
+}
+
+.action-log::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+</style>
 {% endblock %}

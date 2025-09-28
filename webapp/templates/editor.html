@@ -214,6 +214,30 @@
                 {% endfor %}
             </div>
         </div>
+
+        <!-- Action Log -->
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-stream"></i> Action Log
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-secondary" onclick="toggleActionLog()" id="toggle-log-btn">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="clearActionLog()">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="action-log" class="action-log-compact">
+                    <div class="p-2 text-muted text-center small">
+                        <i class="fas fa-info-circle"></i> Action log will appear here
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -269,9 +293,15 @@ function validateSequence(silent = false) {
         return;
     }
 
-    $.post('/api/validate', {
-        sequence: code
-    }, 'json')
+    $.ajax({
+        url: '/api/validate',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            sequence: code
+        }),
+        dataType: 'json'
+    })
     .done(function(data) {
         displayValidationResults(data, silent);
     })
@@ -349,10 +379,16 @@ function saveSequence() {
     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     saveBtn.disabled = true;
 
-    $.post('/api/save', {
-        name: name,
-        sequence: code
-    }, 'json')
+    $.ajax({
+        url: '/api/save',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            name: name,
+            sequence: code
+        }),
+        dataType: 'json'
+    })
     .done(function(data) {
         if (data.success) {
             showFlashMessage(data.message, 'success');
@@ -394,10 +430,16 @@ function saveAndRun() {
     }
 
     // First save the sequence
-    $.post('/api/save', {
-        name: name,
-        sequence: code
-    }, 'json')
+    $.ajax({
+        url: '/api/save',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            name: name,
+            sequence: code
+        }),
+        dataType: 'json'
+    })
     .done(function(data) {
         if (data.success) {
             showFlashMessage('Sequence saved successfully', 'success');
@@ -473,8 +515,225 @@ function loadExampleByName(exampleName) {
 }
 
 // Keyboard shortcuts info
+// Action log functionality (compact version for editor)
+let actionLogPaused = false;
+let eventSource = null;
+
+function initActionLog() {
+    if (eventSource) {
+        eventSource.close();
+    }
+
+    eventSource = new EventSource('/api/feedback/stream');
+
+    eventSource.onmessage = function(event) {
+        if (actionLogPaused) return;
+
+        try {
+            const action = JSON.parse(event.data);
+            addActionToLog(action);
+        } catch (e) {
+            console.error('Error parsing action data:', e);
+        }
+    };
+
+    eventSource.onerror = function(event) {
+        console.error('Action log stream error:', event);
+        setTimeout(() => {
+            if (!actionLogPaused) {
+                initActionLog();
+            }
+        }, 5000);
+    };
+}
+
+function addActionToLog(action) {
+    const logContainer = $('#action-log');
+    const timestamp = new Date(action.timestamp).toLocaleTimeString();
+
+    // Remove placeholder text if present
+    if (logContainer.find('.text-muted.text-center').length) {
+        logContainer.empty();
+    }
+
+    // Determine icon and color based on action type
+    let icon, colorClass;
+    switch (action.type) {
+        case 'dmx':
+            icon = 'fa-lightbulb';
+            colorClass = 'text-warning';
+            break;
+        case 'sound':
+            icon = 'fa-volume-up';
+            colorClass = 'text-info';
+            break;
+        case 'sleep':
+            icon = 'fa-clock';
+            colorClass = 'text-secondary';
+            break;
+        case 'loop':
+            icon = 'fa-repeat';
+            colorClass = 'text-success';
+            break;
+        case 'sequence':
+            icon = 'fa-play';
+            colorClass = 'text-primary';
+            break;
+        case 'system':
+            icon = 'fa-cog';
+            colorClass = 'text-info';
+            break;
+        case 'error':
+            icon = 'fa-exclamation-triangle';
+            colorClass = 'text-danger';
+            break;
+        default:
+            icon = 'fa-info-circle';
+            colorClass = 'text-muted';
+    }
+
+    const logEntry = $(`
+        <div class="action-entry-compact border-bottom">
+            <div class="d-flex align-items-center px-2 py-1">
+                <div class="flex-shrink-0 me-2">
+                    <i class="fas ${icon} ${colorClass} fa-sm"></i>
+                </div>
+                <div class="flex-grow-1 text-truncate">
+                    <div class="action-message-compact small">${action.message}</div>
+                </div>
+                <div class="flex-shrink-0 ms-2">
+                    <small class="text-muted">${timestamp}</small>
+                </div>
+            </div>
+        </div>
+    `);
+
+    logContainer.prepend(logEntry);
+
+    // Keep only last 30 entries
+    const entries = logContainer.find('.action-entry-compact');
+    if (entries.length > 30) {
+        entries.slice(30).remove();
+    }
+
+    // Auto-scroll to top for new entries
+    logContainer.scrollTop(0);
+}
+
+function toggleActionLog() {
+    actionLogPaused = !actionLogPaused;
+    const btn = $('#toggle-log-btn');
+
+    if (actionLogPaused) {
+        btn.html('<i class="fas fa-play"></i> Resume');
+        btn.removeClass('btn-outline-secondary').addClass('btn-outline-success');
+        if (eventSource) {
+            eventSource.close();
+        }
+    } else {
+        btn.html('<i class="fas fa-pause"></i> Pause');
+        btn.removeClass('btn-outline-success').addClass('btn-outline-secondary');
+        initActionLog();
+    }
+}
+
+function clearActionLog() {
+    if (!confirm('Are you sure you want to clear the action log?')) {
+        return;
+    }
+
+    $.post('/api/feedback/clear')
+        .done(function(data) {
+            if (data.success) {
+                $('#action-log').html(`
+                    <div class="p-2 text-muted text-center small">
+                        <i class="fas fa-info-circle"></i> Action log cleared
+                    </div>
+                `);
+                showFlashMessage('Action log cleared', 'success');
+            } else {
+                showFlashMessage(data.error || 'Failed to clear action log', 'danger');
+            }
+        })
+        .fail(function(xhr) {
+            const error = xhr.responseJSON?.error || 'Failed to clear action log';
+            showFlashMessage(error, 'danger');
+        });
+}
+
+// Load initial actions
+function loadInitialActions() {
+    $.get('/api/feedback/actions?limit=10')
+        .done(function(data) {
+            if (data.success && data.actions.length > 0) {
+                const logContainer = $('#action-log');
+                logContainer.empty();
+
+                data.actions.reverse().forEach(action => {
+                    addActionToLog(action);
+                });
+            }
+        })
+        .fail(function(xhr) {
+            console.error('Failed to load initial actions:', xhr);
+        });
+}
+
 $(document).ready(function() {
     showFlashMessage('Tip: Use Ctrl+S to save, F5 to save & run, Ctrl+Enter to validate', 'info');
+    loadInitialActions();
+    initActionLog();
+});
+
+// Clean up event source when page unloads
+$(window).on('beforeunload', function() {
+    if (eventSource) {
+        eventSource.close();
+    }
 });
 </script>
+
+<style>
+.action-log-compact {
+    height: 200px;
+    overflow-y: auto;
+    background-color: #1a1a1a;
+    border: 1px solid #404040;
+}
+
+.action-entry-compact {
+    border-bottom: 1px solid #2d2d2d !important;
+    transition: background-color 0.2s;
+}
+
+.action-entry-compact:hover {
+    background-color: #2d2d2d;
+}
+
+.action-entry-compact:last-child {
+    border-bottom: none !important;
+}
+
+.action-message-compact {
+    color: #ffffff;
+    font-size: 0.8rem;
+}
+
+.action-log-compact::-webkit-scrollbar {
+    width: 4px;
+}
+
+.action-log-compact::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.action-log-compact::-webkit-scrollbar-thumb {
+    background: #404040;
+    border-radius: 2px;
+}
+
+.action-log-compact::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+</style>
 {% endblock %}
