@@ -1,0 +1,20 @@
+{
+    "control_pin": 17,
+    "serial_port": "/dev/ttyS0",
+    "baud_rate": 250000,
+    "sounds_directory": "sounds",
+    "sequences_directory": "sequences",
+    "web_host": "0.0.0.0",
+    "web_port": 5000,
+    "web_debug": false,
+    "dmx_channels": 512,
+    "auto_stop_on_error": true,
+    "max_sequence_size": 1048576,
+    "validation_timeout": 30,
+    "sound_formats": [".wav", ".mp3", ".ogg", ".flac", ".m4a"],
+    "gpio_cleanup_on_exit": true,
+    "status_update_interval": 1.0,
+    "sequence_execution_timeout": 3600,
+    "log_level": "INFO",
+    "enable_web_logging": true
+}

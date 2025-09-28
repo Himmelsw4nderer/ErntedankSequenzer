@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ErntedankSequenzer{% endblock %}</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .navbar {
+            background-color: #2d2d2d !important;
+            border-bottom: 2px solid #007bff;
+        }
+
+        .navbar-brand {
+            font-weight: bold;
+            color: #007bff !important;
+        }
+
+        .navbar-nav .nav-link {
+            color: #ffffff !important;
+            transition: color 0.3s;
+        }
+
+        .navbar-nav .nav-link:hover {
+            color: #007bff !important;
+        }
+
+        .card {
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+        }
+
+        .card-header {
+            background-color: #404040;
+            border-bottom: 1px solid #555555;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+
+        .btn-warning {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #000;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .form-control, .form-select {
+            background-color: #404040;
+            border-color: #555555;
+            color: #ffffff;
+        }
+
+        .form-control:focus, .form-select:focus {
+            background-color: #404040;
+            border-color: #007bff;
+            color: #ffffff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        .table-dark {
+            --bs-table-bg: #2d2d2d;
+            --bs-table-striped-bg: #404040;
+        }
+
+        .alert-danger {
+            background-color: #721c24;
+            border-color: #842029;
+            color: #ea868f;
+        }
+
+        .alert-warning {
+            background-color: #664d03;
+            border-color: #997404;
+            color: #ffda6a;
+        }
+
+        .alert-success {
+            background-color: #0f5132;
+            border-color: #146c43;
+            color: #75b798;
+        }
+
+        .alert-info {
+            background-color: #055160;
+            border-color: #087990;
+            color: #6edff6;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-running {
+            background-color: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-stopped {
+            background-color: #6c757d;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .CodeMirror {
+            background-color: #272822;
+            color: #f8f8f2;
+            border: 1px solid #555555;
+            font-size: 14px;
+            height: 400px;
+        }
+
+        .sequence-card {
+            transition: transform 0.2s;
+        }
+
+        .sequence-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .footer {
+            background-color: #2d2d2d;
+            border-top: 1px solid #404040;
+            margin-top: 50px;
+            padding: 20px 0;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-music"></i> ErntedankSequenzer
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('editor') }}">
+                            <i class="fas fa-edit"></i> New Sequence
+                        </a>
+                    </li>
+                </ul>
+
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <span class="nav-link" id="status-indicator">
+                            <span class="status-indicator status-stopped"></span>
+                            <span id="status-text">Stopped</span>
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container my-4">
+        <!-- Flash Messages -->
+        <div id="flash-messages"></div>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto">
+        <div class="container text-center">
+            <small class="text-muted">
+                ErntedankSequenzer - DMX & Sound Sequence Controller
+            </small>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- CodeMirror JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+
+    <script>
+        // Global functions for flash messages and status updates
+        function showFlashMessage(message, type = 'info') {
+            const alertClass = `alert-${type}`;
+            const iconClass = type === 'danger' ? 'fa-exclamation-triangle' :
+                             type === 'success' ? 'fa-check-circle' :
+                             type === 'warning' ? 'fa-exclamation-circle' : 'fa-info-circle';
+
+            const html = `
+                <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                    <i class="fas ${iconClass}"></i> ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+
+            $('#flash-messages').append(html);
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                $('#flash-messages .alert').first().alert('close');
+            }, 5000);
+        }
+
+        function updateStatus() {
+            $.get('/api/control/status')
+                .done(function(data) {
+                    if (data.success) {
+                        const status = data.status;
+                        const indicator = $('#status-indicator .status-indicator');
+                        const text = $('#status-text');
+
+                        if (status.running) {
+                            indicator.removeClass('status-stopped').addClass('status-running');
+                            text.text(status.loop_mode ? 'Running (Loop)' : 'Running (Once)');
+                        } else {
+                            indicator.removeClass('status-running').addClass('status-stopped');
+                            text.text('Stopped');
+                        }
+                    }
+                })
+                .fail(function() {
+                    const indicator = $('#status-indicator .status-indicator');
+                    const text = $('#status-text');
+                    indicator.removeClass('status-running').addClass('status-stopped');
+                    text.text('Disconnected');
+                });
+        }
+
+        // Update status every 2 seconds
+        setInterval(updateStatus, 2000);
+
+        // Initial status update
+        $(document).ready(function() {
+            updateStatus();
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

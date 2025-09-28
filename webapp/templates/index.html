@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}ErntedankSequenzer - Home{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list"></i> Sequences
+                </h5>
+                <a href="{{ url_for('editor') }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus"></i> New Sequence
+                </a>
+            </div>
+            <div class="card-body">
+                {% if sequences %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Modified</th>
+                                    <th>Size</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sequences-table">
+                                {% for sequence in sequences %}
+                                <tr data-sequence="{{ sequence.name }}">
+                                    <td>
+                                        <i class="fas fa-file-code"></i>
+                                        {{ sequence.name }}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ moment(sequence.modified).format('YYYY-MM-DD HH:mm') if moment else sequence.modified }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ sequence.size }} bytes</small>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button class="btn btn-success" onclick="runSequenceOnce('{{ sequence.name }}')" title="Run Once">
+                                                <i class="fas fa-play"></i>
+                                            </button>
+                                            <button class="btn btn-primary" onclick="startSequence('{{ sequence.name }}')" title="Start Loop">
+                                                <i class="fas fa-repeat"></i>
+                                            </button>
+                                            <a href="{{ url_for('editor', sequence_name=sequence.name) }}" class="btn btn-secondary" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button class="btn btn-danger" onclick="deleteSequence('{{ sequence.name }}')" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-file-code fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No sequences found</h5>
+                        <p class="text-muted">Create your first sequence to get started!</p>
+                        <a href="{{ url_for('editor') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create Sequence
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Control Panel -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-play-circle"></i> Control Panel
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button id="stop-btn" class="btn btn-danger" onclick="stopSequence()">
+                        <i class="fas fa-stop"></i> Stop All
+                    </button>
+                </div>
+
+                <hr>
+
+                <div class="status-display">
+                    <h6>Current Status:</h6>
+                    <div id="detailed-status" class="p-3 bg-dark rounded">
+                        <div class="d-flex align-items-center">
+                            <span class="status-indicator status-stopped"></span>
+                            <span>Loading status...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Examples -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-lightbulb"></i> Quick Examples
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Click to load examples in the editor:</p>
+
+                {% for name, code in examples.items() %}
+                <div class="mb-2">
+                    <button class="btn btn-outline-info btn-sm w-100" onclick="loadExample('{{ name }}')">
+                        {{ name.replace('_', ' ').title() }}
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete the sequence "<span id="delete-sequence-name"></span>"?
+                <br><small class="text-warning">This action cannot be undone.</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let sequenceToDelete = null;
+
+function runSequenceOnce(sequenceName) {
+    const button = event.target.closest('button');
+    const originalContent = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+
+    $.get(`/api/control/run/${sequenceName}`)
+        .done(function(data) {
+            if (data.success) {
+                showFlashMessage(data.message, 'success');
+            } else {
+                showFlashMessage(data.error || 'Failed to run sequence', 'danger');
+            }
+        })
+        .fail(function(xhr) {
+            const error = xhr.responseJSON?.error || 'Failed to run sequence';
+            showFlashMessage(error, 'danger');
+        })
+        .always(function() {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+}
+
+function startSequence(sequenceName) {
+    const button = event.target.closest('button');
+    const originalContent = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+
+    $.get(`/api/control/start/${sequenceName}`)
+        .done(function(data) {
+            if (data.success) {
+                showFlashMessage(data.message, 'success');
+            } else {
+                showFlashMessage(data.error || 'Failed to start sequence', 'danger');
+            }
+        })
+        .fail(function(xhr) {
+            const error = xhr.responseJSON?.error || 'Failed to start sequence';
+            showFlashMessage(error, 'danger');
+        })
+        .always(function() {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+}
+
+function stopSequence() {
+    const button = $('#stop-btn');
+    const originalContent = button.html();
+    button.html('<i class="fas fa-spinner fa-spin"></i> Stopping...');
+    button.prop('disabled', true);
+
+    $.get('/api/control/stop')
+        .done(function(data) {
+            if (data.success) {
+                showFlashMessage(data.message, 'success');
+            } else {
+                showFlashMessage(data.error || 'Failed to stop sequence', 'danger');
+            }
+        })
+        .fail(function(xhr) {
+            const error = xhr.responseJSON?.error || 'Failed to stop sequence';
+            showFlashMessage(error, 'danger');
+        })
+        .always(function() {
+            button.html(originalContent);
+            button.prop('disabled', false);
+        });
+}
+
+function deleteSequence(sequenceName) {
+    sequenceToDelete = sequenceName;
+    $('#delete-sequence-name').text(sequenceName);
+    $('#deleteModal').modal('show');
+}
+
+function loadExample(exampleName) {
+    window.location.href = `{{ url_for('editor') }}?example=${exampleName}`;
+}
+
+function refreshSequencesList() {
+    $.get('/api/sequences')
+        .done(function(data) {
+            if (data.success) {
+                updateSequencesTable(data.sequences);
+            }
+        })
+        .fail(function() {
+            showFlashMessage('Failed to refresh sequences list', 'warning');
+        });
+}
+
+function updateSequencesTable(sequences) {
+    const tbody = $('#sequences-table');
+    tbody.empty();
+
+    if (sequences.length === 0) {
+        const emptyRow = `
+            <tr>
+                <td colspan="4" class="text-center py-4">
+                    <i class="fas fa-file-code fa-2x text-muted mb-2"></i>
+                    <br><span class="text-muted">No sequences found</span>
+                </td>
+            </tr>
+        `;
+        tbody.append(emptyRow);
+        return;
+    }
+
+    sequences.forEach(function(sequence) {
+        const modifiedDate = new Date(sequence.modified * 1000).toLocaleString();
+        const row = `
+            <tr data-sequence="${sequence.name}">
+                <td>
+                    <i class="fas fa-file-code"></i>
+                    ${sequence.name}
+                </td>
+                <td>
+                    <small class="text-muted">${modifiedDate}</small>
+                </td>
+                <td>
+                    <small class="text-muted">${sequence.size} bytes</small>
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-success" onclick="runSequenceOnce('${sequence.name}')" title="Run Once">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="btn btn-primary" onclick="startSequence('${sequence.name}')" title="Start Loop">
+                            <i class="fas fa-repeat"></i>
+                        </button>
+                        <a href="{{ url_for('editor') }}/${sequence.name}" class="btn btn-secondary" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button class="btn btn-danger" onclick="deleteSequence('${sequence.name}')" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+}
+
+function updateDetailedStatus() {
+    $.get('/api/control/status')
+        .done(function(data) {
+            if (data.success) {
+                const status = data.status;
+                const statusDiv = $('#detailed-status');
+
+                let statusHtml = `
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="status-indicator ${status.running ? 'status-running' : 'status-stopped'}"></span>
+                        <strong>${status.running ? (status.loop_mode ? 'Running (Loop Mode)' : 'Running (Single Run)') : 'Stopped'}</strong>
+                    </div>
+                `;
+
+                if (status.sound_playing) {
+                    statusHtml += `
+                        <div class="small text-info">
+                            <i class="fas fa-volume-up"></i> Sound is playing
+                        </div>
+                    `;
+                }
+
+                statusDiv.html(statusHtml);
+            }
+        })
+        .fail(function() {
+            $('#detailed-status').html(`
+                <div class="d-flex align-items-center">
+                    <span class="status-indicator status-stopped"></span>
+                    <span class="text-danger">Connection Error</span>
+                </div>
+            `);
+        });
+}
+
+// Event handlers
+$('#confirm-delete').click(function() {
+    if (sequenceToDelete) {
+        const button = $(this);
+        const originalContent = button.html();
+        button.html('<i class="fas fa-spinner fa-spin"></i> Deleting...');
+        button.prop('disabled', true);
+
+        $.ajax({
+            url: `/api/sequences/${sequenceToDelete}`,
+            type: 'DELETE'
+        })
+        .done(function(data) {
+            if (data.success) {
+                showFlashMessage(data.message, 'success');
+                $(`tr[data-sequence="${sequenceToDelete}"]`).fadeOut(function() {
+                    $(this).remove();
+                    if ($('#sequences-table tr').length === 0) {
+                        location.reload();
+                    }
+                });
+                $('#deleteModal').modal('hide');
+            } else {
+                showFlashMessage(data.error || 'Failed to delete sequence', 'danger');
+            }
+        })
+        .fail(function(xhr) {
+            const error = xhr.responseJSON?.error || 'Failed to delete sequence';
+            showFlashMessage(error, 'danger');
+        })
+        .always(function() {
+            button.html(originalContent);
+            button.prop('disabled', false);
+            sequenceToDelete = null;
+        });
+    }
+});
+
+// Update detailed status more frequently
+setInterval(updateDetailedStatus, 1000);
+
+$(document).ready(function() {
+    updateDetailedStatus();
+});
+</script>
+{% endblock %}

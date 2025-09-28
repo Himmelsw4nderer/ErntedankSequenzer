@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error - ErntedankSequenzer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="mb-4">
+                    <i class="fas fa-exclamation-triangle fa-5x text-danger"></i>
+                </div>
+
+                <h1 class="display-1 text-danger">500</h1>
+                <h2 class="mb-4">Internal Server Error</h2>
+
+                <p class="lead text-muted mb-4">
+                    Something went wrong on our end. Please try again in a few moments.
+                </p>
+
+                <div class="alert alert-warning" role="alert">
+                    <i class="fas fa-info-circle"></i>
+                    If this problem persists, please check the server logs or contact support.
+                </div>
+
+                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">
+                        <i class="fas fa-home"></i> Go Home
+                    </a>
+                    <button class="btn btn-outline-secondary" onclick="location.reload()">
+                        <i class="fas fa-refresh"></i> Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.display-1 {
+    font-size: 6rem;
+    font-weight: 300;
+    line-height: 1.2;
+}
+</style>
+{% endblock %}

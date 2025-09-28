@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+
+{% block title %}ErntedankSequenzer - Editor{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-edit"></i>
+                    <span id="editor-title">
+                        {% if sequence_name %}
+                            Edit Sequence: {{ sequence_name }}
+                        {% else %}
+                            New Sequence
+                        {% endif %}
+                    </span>
+                </h5>
+                <div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="validateSequence()">
+                        <i class="fas fa-check"></i> Validate
+                    </button>
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="sequence-form">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="sequence-name" class="form-label">Sequence Name</label>
+                            <input type="text" class="form-control" id="sequence-name"
+                                   value="{{ sequence_name or '' }}" placeholder="Enter sequence name"
+                                   pattern="[a-zA-Z0-9_-]+" title="Only letters, numbers, hyphens and underscores allowed">
+                            <div class="form-text">Only letters, numbers, hyphens and underscores allowed</div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="button" class="btn btn-success me-2" onclick="saveSequence()">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                            <button type="button" class="btn btn-primary me-2" onclick="saveAndRun()">
+                                <i class="fas fa-play"></i> Save & Run
+                            </button>
+                            <button type="button" class="btn btn-warning" onclick="clearEditor()">
+                                <i class="fas fa-trash"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="sequence-code" class="form-label">Sequence Code</label>
+                        <textarea id="sequence-code" name="sequence">{{ sequence_code or '' }}</textarea>
+                    </div>
+                </form>
+
+                <!-- Validation Results -->
+                <div id="validation-results" class="mt-3" style="display: none;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-clipboard-check"></i> Validation Results
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="validation-errors" style="display: none;">
+                                <h6 class="text-danger">
+                                    <i class="fas fa-exclamation-triangle"></i> Errors
+                                </h6>
+                                <ul id="error-list" class="list-unstyled"></ul>
+                            </div>
+                            <div id="validation-warnings" style="display: none;">
+                                <h6 class="text-warning">
+                                    <i class="fas fa-exclamation-circle"></i> Warnings
+                                </h6>
+                                <ul id="warning-list" class="list-unstyled"></ul>
+                            </div>
+                            <div id="validation-success" style="display: none;">
+                                <div class="text-success">
+                                    <i class="fas fa-check-circle"></i> Sequence is valid!
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Function Reference -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-book"></i> Function Reference
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="functionAccordion">
+                    <!-- DMX Function -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#dmx-collapse">
+                                <strong>write_dmx(address, value)</strong>
+                            </button>
+                        </h2>
+                        <div id="dmx-collapse" class="accordion-collapse collapse"
+                             data-bs-parent="#functionAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Description:</strong> Send DMX value to specified channel</p>
+                                <p><strong>Parameters:</strong></p>
+                                <ul>
+                                    <li><code>address</code>: DMX channel (1-512)</li>
+                                    <li><code>value</code>: DMX value (0-255)</li>
+                                </ul>
+                                <p><strong>Example:</strong></p>
+                                <code>write_dmx(1, 255)  # Channel 1 full brightness</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sleep Function -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#sleep-collapse">
+                                <strong>sleep(seconds)</strong>
+                            </button>
+                        </h2>
+                        <div id="sleep-collapse" class="accordion-collapse collapse"
+                             data-bs-parent="#functionAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Description:</strong> Pause execution for specified time</p>
+                                <p><strong>Parameters:</strong></p>
+                                <ul>
+                                    <li><code>seconds</code>: Time to wait (float/int)</li>
+                                </ul>
+                                <p><strong>Examples:</strong></p>
+                                <code>sleep(2)    # Wait 2 seconds<br>
+                                sleep(0.5)  # Wait 500ms</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sound Function -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#sound-collapse">
+                                <strong>play_sound(file, volume)</strong>
+                            </button>
+                        </h2>
+                        <div id="sound-collapse" class="accordion-collapse collapse"
+                             data-bs-parent="#functionAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Description:</strong> Play audio file</p>
+                                <p><strong>Parameters:</strong></p>
+                                <ul>
+                                    <li><code>file</code>: Sound filename (string)</li>
+                                    <li><code>volume</code>: Volume level (0.0-1.0, optional)</li>
+                                </ul>
+                                <p><strong>Examples:</strong></p>
+                                <code>play_sound('music.mp3')<br>
+                                play_sound('effect.wav', 0.7)</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Functions -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#other-collapse">
+                                <strong>Other Functions</strong>
+                            </button>
+                        </h2>
+                        <div id="other-collapse" class="accordion-collapse collapse"
+                             data-bs-parent="#functionAccordion">
+                            <div class="accordion-body">
+                                <p><strong>wait_for_sound()</strong><br>
+                                Wait for current sound to finish playing</p>
+
+                                <p><strong>stop_sound()</strong><br>
+                                Stop currently playing sound</p>
+
+                                <p><strong>Examples:</strong></p>
+                                <code>play_sound('music.mp3')<br>
+                                write_dmx(1, 255)<br>
+                                wait_for_sound()  # Wait for music to end<br>
+                                write_dmx(1, 0)</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Examples -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-lightbulb"></i> Examples
+                </h5>
+            </div>
+            <div class="card-body">
+                {% for name, code in examples.items() %}
+                <div class="mb-2">
+                    <button class="btn btn-outline-info btn-sm w-100" onclick="loadExample('{{ name }}')">
+                        <i class="fas fa-code"></i> {{ name.replace('_', ' ').title() }}
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let codeEditor;
+let currentSequenceName = '{{ sequence_name or "" }}';
+
+// Initialize CodeMirror
+$(document).ready(function() {
+    codeEditor = CodeMirror.fromTextArea(document.getElementById('sequence-code'), {
+        mode: 'python',
+        theme: 'monokai',
+        lineNumbers: true,
+        indentUnit: 4,
+        lineWrapping: true,
+        matchBrackets: true,
+        autoCloseBrackets: true,
+        extraKeys: {
+            'Ctrl-S': function() { saveSequence(); },
+            'F5': function() { saveAndRun(); },
+            'Ctrl-Enter': function() { validateSequence(); }
+        }
+    });
+
+    // Load example if requested
+    const urlParams = new URLSearchParams(window.location.search);
+    const exampleName = urlParams.get('example');
+    if (exampleName) {
+        loadExampleByName(exampleName);
+    }
+
+    // Auto-validate on code change (debounced)
+    let validationTimeout;
+    codeEditor.on('change', function() {
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(function() {
+            if (codeEditor.getValue().trim()) {
+                validateSequence(true); // Silent validation
+            }
+        }, 1000);
+    });
+});
+
+function validateSequence(silent = false) {
+    const code = codeEditor.getValue();
+
+    if (!code.trim()) {
+        if (!silent) {
+            showFlashMessage('Please enter some sequence code first', 'warning');
+        }
+        return;
+    }
+
+    $.post('/api/validate', {
+        sequence: code
+    }, 'json')
+    .done(function(data) {
+        displayValidationResults(data, silent);
+    })
+    .fail(function() {
+        if (!silent) {
+            showFlashMessage('Validation failed', 'danger');
+        }
+    });
+}
+
+function displayValidationResults(data, silent = false) {
+    const resultsDiv = $('#validation-results');
+    const errorsDiv = $('#validation-errors');
+    const warningsDiv = $('#validation-warnings');
+    const successDiv = $('#validation-success');
+    const errorList = $('#error-list');
+    const warningList = $('#warning-list');
+
+    // Clear previous results
+    errorsDiv.hide();
+    warningsDiv.hide();
+    successDiv.hide();
+    errorList.empty();
+    warningList.empty();
+
+    if (data.errors && data.errors.length > 0) {
+        data.errors.forEach(function(error) {
+            errorList.append(`<li class="text-danger"><i class="fas fa-times-circle"></i> ${error}</li>`);
+        });
+        errorsDiv.show();
+        if (!silent) {
+            showFlashMessage(`Validation failed with ${data.errors.length} error(s)`, 'danger');
+        }
+    }
+
+    if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach(function(warning) {
+            warningList.append(`<li class="text-warning"><i class="fas fa-exclamation-triangle"></i> ${warning}</li>`);
+        });
+        warningsDiv.show();
+    }
+
+    if (data.valid) {
+        successDiv.show();
+        if (!silent) {
+            const warningCount = data.warnings ? data.warnings.length : 0;
+            const message = warningCount > 0
+                ? `Validation passed with ${warningCount} warning(s)`
+                : 'Sequence is valid!';
+            showFlashMessage(message, warningCount > 0 ? 'warning' : 'success');
+        }
+    }
+
+    resultsDiv.show();
+}
+
+function saveSequence() {
+    const name = $('#sequence-name').val().trim();
+    const code = codeEditor.getValue();
+
+    if (!name) {
+        showFlashMessage('Please enter a sequence name', 'warning');
+        $('#sequence-name').focus();
+        return;
+    }
+
+    if (!code.trim()) {
+        showFlashMessage('Please enter some sequence code', 'warning');
+        codeEditor.focus();
+        return;
+    }
+
+    const saveBtn = event.target;
+    const originalContent = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+
+    $.post('/api/save', {
+        name: name,
+        sequence: code
+    }, 'json')
+    .done(function(data) {
+        if (data.success) {
+            showFlashMessage(data.message, 'success');
+            currentSequenceName = name;
+            $('#editor-title').text(`Edit Sequence: ${name}`);
+
+            // Show warnings if any
+            if (data.warnings && data.warnings.length > 0) {
+                data.warnings.forEach(function(warning) {
+                    showFlashMessage(warning, 'warning');
+                });
+            }
+        } else {
+            showFlashMessage(data.error || 'Failed to save sequence', 'danger');
+            if (data.errors) {
+                data.errors.forEach(function(error) {
+                    showFlashMessage(error, 'danger');
+                });
+            }
+        }
+    })
+    .fail(function(xhr) {
+        const error = xhr.responseJSON?.error || 'Failed to save sequence';
+        showFlashMessage(error, 'danger');
+    })
+    .always(function() {
+        saveBtn.innerHTML = originalContent;
+        saveBtn.disabled = false;
+    });
+}
+
+function saveAndRun() {
+    const name = $('#sequence-name').val().trim();
+    const code = codeEditor.getValue();
+
+    if (!name || !code.trim()) {
+        saveSequence(); // This will show appropriate error messages
+        return;
+    }
+
+    // First save the sequence
+    $.post('/api/save', {
+        name: name,
+        sequence: code
+    }, 'json')
+    .done(function(data) {
+        if (data.success) {
+            showFlashMessage('Sequence saved successfully', 'success');
+            currentSequenceName = name;
+            $('#editor-title').text(`Edit Sequence: ${name}`);
+
+            // Then run it
+            $.get(`/api/control/run/${name}`)
+                .done(function(runData) {
+                    if (runData.success) {
+                        showFlashMessage(runData.message, 'success');
+                    } else {
+                        showFlashMessage(runData.error || 'Failed to run sequence', 'danger');
+                    }
+                })
+                .fail(function(xhr) {
+                    const error = xhr.responseJSON?.error || 'Failed to run sequence';
+                    showFlashMessage(error, 'danger');
+                });
+        } else {
+            showFlashMessage(data.error || 'Failed to save sequence', 'danger');
+        }
+    })
+    .fail(function(xhr) {
+        const error = xhr.responseJSON?.error || 'Failed to save sequence';
+        showFlashMessage(error, 'danger');
+    });
+}
+
+function clearEditor() {
+    if (confirm('Are you sure you want to clear the editor? This will remove all unsaved changes.')) {
+        codeEditor.setValue('');
+        $('#sequence-name').val('');
+        $('#validation-results').hide();
+        currentSequenceName = '';
+        $('#editor-title').text('New Sequence');
+    }
+}
+
+function loadExample(exampleName) {
+    $.get('/api/examples')
+        .done(function(data) {
+            if (data.success && data.examples[exampleName]) {
+                if (codeEditor.getValue().trim() &&
+                    !confirm('This will replace the current code. Are you sure?')) {
+                    return;
+                }
+
+                codeEditor.setValue(data.examples[exampleName]);
+                $('#sequence-name').val(exampleName);
+                showFlashMessage(`Loaded example: ${exampleName.replace('_', ' ')}`, 'info');
+
+                // Auto-validate the example
+                setTimeout(function() {
+                    validateSequence();
+                }, 500);
+            }
+        })
+        .fail(function() {
+            showFlashMessage('Failed to load example', 'danger');
+        });
+}
+
+function loadExampleByName(exampleName) {
+    $.get('/api/examples')
+        .done(function(data) {
+            if (data.success && data.examples[exampleName]) {
+                codeEditor.setValue(data.examples[exampleName]);
+                $('#sequence-name').val(exampleName);
+                showFlashMessage(`Loaded example: ${exampleName.replace('_', ' ')}`, 'info');
+            }
+        });
+}
+
+// Keyboard shortcuts info
+$(document).ready(function() {
+    showFlashMessage('Tip: Use Ctrl+S to save, F5 to save & run, Ctrl+Enter to validate', 'info');
+});
+</script>
+{% endblock %}
